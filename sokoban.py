@@ -5,7 +5,8 @@ import pygame
 import string
 import queue
 import copy
-from requests.packages.urllib3 import util
+import inspect
+import heapq, random
 
 class game:
 
@@ -50,6 +51,7 @@ class game:
                         self.matrix.append(row)
                     else:
                         break
+
 
     def load_size(self):
         x = 0
@@ -252,7 +254,7 @@ class SearchProblem:
         """
         Returns the start state for the search problem.
         """
-        util.raiseNotDefined()
+        raiseNotDefined()
 
     def isGoalState(self, state):
         """
@@ -260,7 +262,7 @@ class SearchProblem:
 
         Returns True if and only if the state is a valid goal state.
         """
-        util.raiseNotDefined()
+        raiseNotDefined()
 
     def getSuccessors(self, state):
         """
@@ -271,7 +273,7 @@ class SearchProblem:
         state, 'action' is the action required to get there, and 'stepCost' is
         the incremental cost of expanding to that successor.
         """
-        util.raiseNotDefined()
+        raiseNotDefined()
 
     def getCostOfActions(self, actions):
         """
@@ -280,7 +282,7 @@ class SearchProblem:
         This method returns the total cost of a particular sequence of actions.
         The sequence must be composed of legal moves.
         """
-        util.raiseNotDefined()
+        raiseNotDefined()
 
 class SokobanSearchProblem(SearchProblem):
     """
@@ -296,7 +298,7 @@ class SokobanSearchProblem(SearchProblem):
         return self.sokoban
 
     def isGoalState(self,state):
-        return state.isGoal()
+        return state.is_completed()
 
     def getSuccessors(self,state):
         """
@@ -318,11 +320,69 @@ class SokobanSearchProblem(SearchProblem):
         """
         return len(actions)
 
+class Queue:
+    "A container with a first-in-first-out (FIFO) queuing policy."
+    def __init__(self):
+        self.list = []
+
+    def push(self,item):
+        "Enqueue the 'item' into the queue"
+        self.list.insert(0,item)
+
+    def pop(self):
+        """
+          Dequeue the earliest enqueued item still in the queue. This
+          operation removes the item from the queue.
+        """
+        return self.list.pop()
+
+    def isEmpty(self):
+        "Returns true if the queue is empty"
+        return len(self.list) == 0
+
+class PriorityQueue:
+    """
+      Implements a priority queue data structure. Each inserted item
+      has a priority associated with it and the client is usually interested
+      in quick retrieval of the lowest-priority item in the queue. This
+      data structure allows O(1) access to the lowest-priority item.
+    """
+    def  __init__(self):
+        self.heap = []
+        self.count = 0
+
+    def push(self, item, priority):
+        entry = (priority, self.count, item)
+        heapq.heappush(self.heap, entry)
+        self.count += 1
+
+    def pop(self):
+        (_, _, item) = heapq.heappop(self.heap)
+        return item
+
+    def isEmpty(self):
+        return len(self.heap) == 0
+
+    def update(self, item, priority):
+        # If item already in priority queue with higher priority, update its priority and rebuild the heap.
+        # If item already in priority queue with equal or lower priority, do nothing.
+        # If item not in priority queue, do the same thing as self.push.
+        for index, (p, c, i) in enumerate(self.heap):
+            if i == item:
+                if p <= priority:
+                    break
+                del self.heap[index]
+                self.heap.append((priority, c, item))
+                heapq.heapify(self.heap)
+                break
+        else:
+            self.push(item, priority)
+
 def breadthFirstSearch(problem):
     """Search the shallowest nodes in the search tree first."""
     
     # init frontier including the start state:
-    frontier = util.Queue()
+    frontier = Queue()
     # a frontier item include current state and movements to get there from start state
     frontier.push((problem.getStartState(), []))
     # init empty movements list and explored nodes list
@@ -347,6 +407,70 @@ def breadthFirstSearch(problem):
                 frontier.push(newState)
 
     return moves
+
+def nullHeuristic(state, problem=None):
+    """
+    A heuristic function estimates the cost from the current state to the nearest
+    goal in the provided SearchProblem.  This heuristic is trivial.
+    """
+    return 0
+
+def aStarSearch(problem, heuristic=nullHeuristic):
+    """Search the node that has the lowest combined cost and heuristic first."""
+
+    "*** YOUR CODE HERE ***"
+
+    # init frontier including the start state:
+    frontier = PriorityQueue()
+    # a frontier item include current state and movements to get there from start state
+    startNode = problem.getStartState()
+    frontier.push(startNode, 0)
+
+    # init empty movements list and explored nodes list
+    moves = []
+    explored = []
+    # movement dictionary to each node
+    move_dict = {str(startNode): []}
+
+    while not frontier.isEmpty():
+        state = frontier.pop()
+        path = move_dict[str(state)]
+        # check if the state is goal
+        if problem.isGoalState(state):
+            print(move_dict)
+            moves = path
+            break
+        
+        # state is explored
+        explored.append(state)
+        # print(state, end=' ')
+        # print(move_dict)
+
+        for child in problem.getSuccessors(state):
+            # path to child node
+            newPath = path + [child[1]]
+            newState = child[0]
+            # if the child is not explored yet
+            if child[0] not in explored:
+                # add / update frontier
+                frontier.update(newState, problem.getCostOfActions(newPath)+ heuristic(newState, problem))
+                # add / update path movement dictionary
+                if str(newState) in move_dict.keys() and problem.getCostOfActions(move_dict[str(newState)]) > problem.getCostOfActions(newPath):
+                    move_dict[str(newState)] = newPath
+                elif str(newState) not in move_dict.keys():
+                    move_dict[str(newState)] = newPath
+                # print(child)
+                # print(heuristic(newState, problem))
+
+    return moves
+
+def raiseNotDefined():
+    fileName = inspect.stack()[1][1]
+    line = inspect.stack()[1][2]
+    method = inspect.stack()[1][3]
+
+    print("*** Method not implemented: %s at line %s of %s" % (method, line, fileName))
+    sys.exit(1)
 
 def print_game(matrix,screen):
     screen.fill(background)
@@ -455,7 +579,11 @@ game = game('levels',level)
 size = game.load_size()
 screen = pygame.display.set_mode(size)
 
-print(game.legalMoves())
+#print(game.legalMoves())
+
+problem = SokobanSearchProblem(game)
+solution_path = breadthFirstSearch(problem)
+print('BFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
 
 while 1:
     if game.is_completed(): display_end(screen)
