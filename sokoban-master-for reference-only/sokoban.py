@@ -1,9 +1,11 @@
-#!../bin/python
+
 
 import sys
 import pygame
 import string
 import queue
+import copy
+
 
 class game:
 
@@ -303,6 +305,7 @@ level = start_game()
 game = game('levels',level)
 size = game.load_size()
 screen = pygame.display.set_mode(size)
+
 while 1:
     if game.is_completed(): display_end(screen)
     print_game(game.get_matrix(),screen)
