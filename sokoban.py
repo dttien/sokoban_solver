@@ -8,7 +8,12 @@ import copy
 import inspect
 import heapq, random
 
-class game:
+class SokobanState:
+    
+    def __init__(self,matrix: list):
+        self.queue = queue.LifoQueue()
+        self.matrix = []
+        self.matrix = copy.deepcopy(matrix)
 
     def is_valid_value(self,char):
         if ( char == ' ' or #floor
@@ -22,40 +27,10 @@ class game:
         else:
             return False
 
-    def __init__(self,filename,level):
-        self.queue = queue.LifoQueue()
-        self.matrix = []
-#        if level < 1 or level > 50:
-        if level < 1:
-            print ("ERROR: Level "+str(level)+" is out of range")
-            sys.exit(1)
-        else:
-            file = open(filename,'r')
-            level_found = False
-            for line in file:
-                row = []
-                if not level_found:
-                    if  "Level "+str(level) == line.strip():
-                        level_found = True
-                else:
-                    if line.strip() != "":
-                        row = []
-                        for c in line:
-                            if c != '\n' and self.is_valid_value(c):
-                                row.append(c)
-                            elif c == '\n': #jump to next row when newline
-                                continue
-                            else:
-                                print ("ERROR: Level "+str(level)+" has invalid value "+c)
-                                sys.exit(1)
-                        self.matrix.append(row)
-                    else:
-                        break
-
-
     def load_size(self):
         x = 0
         y = len(self.matrix)
+        
         for row in self.matrix:
             if len(row) > x:
                 x = len(row)
@@ -106,7 +81,7 @@ class game:
         """
           Returns a list of legal moves from the current state.
 
-        Moves consist of moving the blank space up, down, left or right.
+        Moves consist of moving the worker space up, down, left or right.
         These are encoded as 'up', 'down', 'left' and 'right' respectively.
         """
         moves = []
@@ -128,7 +103,7 @@ class game:
             NOTE: This function *does not* change the current object.  Instead,
             it returns a new object.
         """
-        new_game = copy.deepcopy(self)
+        new_game = SokobanState(self.matrix)
         if moves == 'up':
             new_game.move(0, -1, True)
             return new_game
@@ -286,9 +261,9 @@ class SearchProblem:
 
 class SokobanSearchProblem(SearchProblem):
     """
-      Implementation of a SearchProblem for the  Eight Puzzle domain
+      Implementation of a SearchProblem for the Sokoban domain
 
-      Each state is represented by an instance of an eightPuzzle.
+      Each state is represented by an instance of an game.
     """
     def __init__(self,sokoban):
         "Creates a new EightPuzzleSearchProblem which stores search information."
@@ -472,6 +447,48 @@ def raiseNotDefined():
     print("*** Method not implemented: %s at line %s of %s" % (method, line, fileName))
     sys.exit(1)
 
+def is_valid_value(char):
+    if ( char == ' ' or #floor
+        char == '#' or #wall
+        char == '@' or #worker on floor
+        char == '.' or #dock
+        char == '*' or #box on dock
+        char == '$' or #box
+        char == '+' ): #worker on dock
+        return True
+    else:
+        return False
+
+def read_level(filename,level):
+    matrix = []
+#        if level < 1 or level > 50:
+    if level < 1:
+        print ("ERROR: Level "+str(level)+" is out of range")
+        sys.exit(1)
+    else:
+        file = open(filename,'r')
+        level_found = False
+        for line in file:
+            row = []
+            if not level_found:
+                if  "Level "+str(level) == line.strip():
+                    level_found = True
+            else:
+                if line.strip() != "":
+                    row = []
+                    for c in line:
+                        if c != '\n' and is_valid_value(c):
+                            row.append(c)
+                        elif c == '\n': #jump to next row when newline
+                            continue
+                        else:
+                            print ("ERROR: Level "+str(level)+" has invalid value "+c)
+                            sys.exit(1)
+                    matrix.append(row)
+                else:
+                    return matrix
+    
+
 def print_game(matrix,screen):
     screen.fill(background)
     x = 0
@@ -564,37 +581,39 @@ def start_game():
         print ("ERROR: Invalid Level: "+str(level))
         sys.exit(2)
 
-wall = pygame.image.load('images/wall.png')
-floor = pygame.image.load('images/floor.png')
-box = pygame.image.load('images/box.png')
-box_docked = pygame.image.load('images/box_docked.png')
-worker = pygame.image.load('images/worker.png')
-worker_docked = pygame.image.load('images/worker_dock.png')
-docker = pygame.image.load('images/dock.png')
-background = 255, 226, 191
-pygame.init()
+if __name__ == '__main__':
+    wall = pygame.image.load('images/wall.png')
+    floor = pygame.image.load('images/floor.png')
+    box = pygame.image.load('images/box.png')
+    box_docked = pygame.image.load('images/box_docked.png')
+    worker = pygame.image.load('images/worker.png')
+    worker_docked = pygame.image.load('images/worker_dock.png')
+    docker = pygame.image.load('images/dock.png')
+    background = 255, 226, 191
+    pygame.init()
 
-level = start_game()
-game = game('levels',level)
-size = game.load_size()
-screen = pygame.display.set_mode(size)
+    level = start_game()
+    matrix = read_level('levels',level)
+    game = SokobanState(matrix)
+    size = game.load_size()
+    screen = pygame.display.set_mode(size)
 
-#print(game.legalMoves())
+    #print(game.legalMoves())
 
-problem = SokobanSearchProblem(game)
-solution_path = breadthFirstSearch(problem)
-print('BFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
+    problem = SokobanSearchProblem(game)
+    solution_path = breadthFirstSearch(problem)
+    print('BFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
 
-while 1:
-    if game.is_completed(): display_end(screen)
-    print_game(game.get_matrix(),screen)
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT: sys.exit(0)
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_UP: game.move(0,-1, True)
-            elif event.key == pygame.K_DOWN: game.move(0,1, True)
-            elif event.key == pygame.K_LEFT: game.move(-1,0, True)
-            elif event.key == pygame.K_RIGHT: game.move(1,0, True)
-            elif event.key == pygame.K_q: sys.exit(0)
-            elif event.key == pygame.K_d: game.unmove()
-    pygame.display.update()
+    while 1:
+        if game.is_completed(): display_end(screen)
+        print_game(game.get_matrix(),screen)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: sys.exit(0)
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP: game.move(0,-1, True)
+                elif event.key == pygame.K_DOWN: game.move(0,1, True)
+                elif event.key == pygame.K_LEFT: game.move(-1,0, True)
+                elif event.key == pygame.K_RIGHT: game.move(1,0, True)
+                elif event.key == pygame.K_q: sys.exit(0)
+                elif event.key == pygame.K_d: game.unmove()
+        pygame.display.update()
