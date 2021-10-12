@@ -8,6 +8,9 @@ import queue
 import copy
 import inspect
 import heapq, random
+import time
+import os
+import psutil
 
 class SokobanState:
     
@@ -462,12 +465,12 @@ def breadthFirstSearch(problem):
         elif state not in explored:
             explored.append(state)
             for child in problem.getSuccessors(state):
-                if child[0].check_deadlock() == False:
-                    # add the new move
-                    newPath = path + [child[1]]
-                    # create new state
-                    newState = (child[0], newPath)
-                    frontier.push(newState)
+                # if child[0].check_deadlock() == False:
+                # add the new move
+                newPath = path + [child[1]]
+                # create new state
+                newState = (child[0], newPath)
+                frontier.push(newState)
     return moves
 
 def nullHeuristic(state, problem=None):
@@ -691,13 +694,22 @@ if __name__ == '__main__':
     matrix = read_level('levels',level)
     game = SokobanState(matrix)
     size = game.load_size()
-    #print(game.check_deadlock())
     screen = pygame.display.set_mode(size)
 
     problem = SokobanSearchProblem(game)
+
+    time_start = time.perf_counter()
     solution_path = breadthFirstSearch(problem)
+    time_elapsed = (time.perf_counter() - time_start)
+    memb = psutil.Process(os.getpid())
+    print ("BrFS take %5.1f secs and %5.1f Byte of memory" % (time_elapsed, memb.memory_info().rss))
     print('BrFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
+
+    # time_start = time.perf_counter()
     # solution_path = aStarSearch(problem, Heuristic)
+    # time_elapsed = (time.perf_counter() - time_start)
+    # memb = psutil.Process(os.getpid())
+    # print ("A* take %5.1f secs and %5.1f Byte of memory" % (time_elapsed, memb.memory_info().rss))
     # print('A* found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
 
     while 1:
