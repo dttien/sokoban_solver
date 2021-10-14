@@ -1,12 +1,16 @@
 
-
+import functools
 import sys
+from typing import Tuple
 import pygame
 import string
 import queue
 import copy
 import inspect
 import heapq, random
+import time
+import os
+import psutil
 
 class SokobanState:
     
@@ -14,6 +18,22 @@ class SokobanState:
         self.queue = queue.LifoQueue()
         self.matrix = []
         self.matrix = copy.deepcopy(matrix)
+        self.box = []
+        self.dock = []
+        self.width = 0 # width of the matrix
+        self.height = 0 # height of the matrix
+        x = 0
+        y = 0
+        # Store initial position of box and dock
+        for row in self.matrix:
+            for pos in row:
+                if pos == '$' or pos == '*':
+                    self.box.append([x,y])
+                if pos == '.' or pos == '*' or pos == '+':
+                    self.dock.append([x,y])
+                x = x + 1
+            y = y + 1
+            x = 0
 
     def is_valid_value(self,char):
         if ( char == ' ' or #floor
@@ -27,14 +47,67 @@ class SokobanState:
         else:
             return False
 
+    def check_deadlock(self):
+        """
+        This method return True if the current state is a deadlock, otherwise it return False
+        """
+        for box in self.box:
+            if (self.matrix[box[1]][box[0] - 1] == '#' and self.matrix[box[1] - 1][box[0]] == '#') or \
+                (self.matrix[box[1]][box[0] - 1] == '#' and self.matrix[box[1] + 1][box[0]] == '#') or \
+                (self.matrix[box[1]][box[0] + 1] == '#' and self.matrix[box[1] - 1][box[0]] == '#') or \
+                (self.matrix[box[1]][box[0] + 1] == '#' and self.matrix[box[1] + 1][box[0]] == '#') or \
+                (self.matrix[box[1]][box[0]] == '$' and (self.matrix[box[1]][box[0] + 1] == '$' or self.matrix[box[1]][box[0] + 1] == '*') and \
+                    (self.matrix[box[1] + 1][box[0]] == '$' or self.matrix[box[1] + 1][box[0]] == '*') and \
+                    (self.matrix[box[1] + 1][box[0] + 1] == '$' or self.matrix[box[1] + 1][box[0] + 1] == '*')) or \
+                (self.matrix[box[1]][box[0]] == '*' and (self.matrix[box[1]][box[0] + 1] == '$' or self.matrix[box[1] + 1][box[0]] == '$' or \
+                    self.matrix[box[1] + 1][box[0] + 1] == '$')):
+                return True
+        
+        # first line
+        num_box_l1 = 0
+        num_dock_l1 = 0
+        # last line
+        num_box_ll = 0 
+        num_dock_ll = 0
+        # left most
+        num_box_l = 0
+        num_dock_l = 0
+        # right most
+        num_box_r = 0
+        num_dock_r = 0
+        for box in self.box:
+            if box[1] == 1:
+                num_box_l1 = num_box_l1 + 1
+            if box[1] == self.height - 2:
+                num_box_ll = num_box_ll + 1
+            if box[0] == 1:
+                num_box_l = num_box_l + 1
+            if box[0] == self.width - 2:
+                num_box_r = num_box_r + 1
+        for dock in self.dock:
+            if dock[1] == 1: 
+                num_dock_l1 = num_dock_l1 + 1
+            if dock[1] == self.height - 2:
+                num_dock_ll = num_dock_ll + 1
+            if dock[0] == 1:
+                num_dock_l = num_dock_l + 1
+            if dock[0] == self.width - 2:
+                num_dock_r = num_dock_r + 1
+            
+        if num_box_l1 > 0 and num_box_l1 > num_dock_l1: return True
+        elif num_box_ll > 0 and num_box_ll > num_dock_ll: return True
+        elif num_box_l > 0 and num_box_l > num_dock_l: return True
+        elif num_box_r > 0 and num_box_r > num_dock_r: return True
+
+        return False
+
     def load_size(self):
-        x = 0
-        y = len(self.matrix)
+        self.height = len(self.matrix)
         
         for row in self.matrix:
-            if len(row) > x:
-                x = len(row)
-        return (x * 32, y * 32)
+            if len(row) > self.width:
+                self.width = len(row)
+        return (self.width * 32, self.height * 32)
 
     def get_matrix(self):
         return self.matrix
@@ -127,8 +200,13 @@ class SokobanState:
         return True
 
     def move_box(self,x,y,a,b):
-#        (x,y) -> move to do
-#        (a,b) -> box to move
+        #  (x,y) -> move to do
+        #  (a,b) -> box to move
+        for box in self.box:
+            if box[0] == x and box[1] == y:
+                box[0] = x + a
+                box[1] = y + b
+        
         current_box = self.get_content(x,y)
         future_box = self.get_content(x+a,y+b)
         if current_box == '$' and future_box == ' ':
@@ -218,6 +296,7 @@ class SokobanState:
                 self.set_content(current[0],current[1],'.')
                 self.set_content(current[0]+x,current[1]+y,'+')
                 if save: self.queue.put((x,y,True))
+            
 
 class SearchProblem:
     """
@@ -283,7 +362,10 @@ class SokobanSearchProblem(SearchProblem):
         """
         succ = []
         for a in state.legalMoves():
-            succ.append((state.result(a), a, 1))
+            successor = state.result(a)
+            succ.append((successor, a, 1))
+            # if successor.check_deadlock():
+            #     print(successor.matrix)
         return succ
 
     def getCostOfActions(self, actions):
@@ -315,13 +397,25 @@ class Queue:
         "Returns true if the queue is empty"
         return len(self.list) == 0
 
+class Stack:
+    "A container with a last-in-first-out (LIFO) queuing policy."
+    def __init__(self):
+        self.list = []
+
+    def push(self,item):
+        "Push 'item' onto the stack"
+        self.list.append(item)
+
+    def pop(self):
+        "Pop the most recently pushed item from the stack"
+        return self.list.pop()
+
+    def isEmpty(self):
+        "Returns true if the stack is empty"
+        return len(self.list) == 0
+
 class PriorityQueue:
-    """
-      Implements a priority queue data structure. Each inserted item
-      has a priority associated with it and the client is usually interested
-      in quick retrieval of the lowest-priority item in the queue. This
-      data structure allows O(1) access to the lowest-priority item.
-    """
+    
     def  __init__(self):
         self.heap = []
         self.count = 0
@@ -354,8 +448,6 @@ class PriorityQueue:
             self.push(item, priority)
 
 def breadthFirstSearch(problem):
-    """Search the shallowest nodes in the search tree first."""
-    
     # init frontier including the start state:
     frontier = Queue()
     # a frontier item include current state and movements to get there from start state
@@ -369,31 +461,36 @@ def breadthFirstSearch(problem):
         if problem.isGoalState(state):
             moves = path
             break 
-            
-        
         # check if the state is not visited
         elif state not in explored:
             explored.append(state)
             for child in problem.getSuccessors(state):
+                # if child[0].check_deadlock() == False:
                 # add the new move
                 newPath = path + [child[1]]
                 # create new state
                 newState = (child[0], newPath)
                 frontier.push(newState)
-
     return moves
 
 def nullHeuristic(state, problem=None):
-    """
-    A heuristic function estimates the cost from the current state to the nearest
-    goal in the provided SearchProblem.  This heuristic is trivial.
-    """
+    
     return 0
 
-def aStarSearch(problem, heuristic=nullHeuristic):
-    """Search the node that has the lowest combined cost and heuristic first."""
+def Heuristic(state, problem):
+    dist_sum = 0
+    for box in state.box:
+        min_dist = 2**31
+        for storage in state.dock:
+            # Calculate manhattan distance between box and storage point
+            new_dist = abs(box[0] - storage[0]) + abs(box[1] - storage[1])
+            if new_dist < min_dist:
+                min_dist = new_dist
+        dist_sum += min_dist
+    return dist_sum
 
-    "*** YOUR CODE HERE ***"
+def aStarSearch(problem, heuristic=nullHeuristic):
+    # Search the node that has the lowest combined cost and heuristic first.
 
     # init frontier including the start state:
     frontier = PriorityQueue()
@@ -412,7 +509,7 @@ def aStarSearch(problem, heuristic=nullHeuristic):
         path = move_dict[str(state)]
         # check if the state is goal
         if problem.isGoalState(state):
-            print(move_dict)
+            #print(move_dict)
             moves = path
             break
         
@@ -438,6 +535,7 @@ def aStarSearch(problem, heuristic=nullHeuristic):
                 # print(heuristic(newState, problem))
 
     return moves
+
 
 def raiseNotDefined():
     fileName = inspect.stack()[1][1]
@@ -515,28 +613,28 @@ def print_game(matrix,screen):
 
 
 def get_key():
-  while 1:
-    event = pygame.event.poll()
-    if event.type == pygame.KEYDOWN:
-      return event.key
-    else:
-      pass
+    while 1:
+        event = pygame.event.poll()
+        if event.type == pygame.KEYDOWN:
+            return event.key
+        else:
+            pass
 
 def display_box(screen, message):
-  "Print a message in a box in the middle of the screen"
-  fontobject = pygame.font.Font(None,18)
-  pygame.draw.rect(screen, (0,0,0),
-                   ((screen.get_width() / 2) - 100,
-                    (screen.get_height() / 2) - 10,
-                    200,20), 0)
-  pygame.draw.rect(screen, (255,255,255),
-                   ((screen.get_width() / 2) - 102,
-                    (screen.get_height() / 2) - 12,
-                    204,24), 1)
-  if len(message) != 0:
-    screen.blit(fontobject.render(message, 1, (255,255,255)),
-                ((screen.get_width() / 2) - 100, (screen.get_height() / 2) - 10))
-  pygame.display.flip()
+    "Print a message in a box in the middle of the screen"
+    fontobject = pygame.font.Font(None,18)
+    pygame.draw.rect(screen, (0,0,0),
+                    ((screen.get_width() / 2) - 100,
+                        (screen.get_height() / 2) - 10,
+                        200,20), 0)
+    pygame.draw.rect(screen, (255,255,255),
+                    ((screen.get_width() / 2) - 102,
+                        (screen.get_height() / 2) - 12,
+                        204,24), 1)
+    if len(message) != 0:
+        screen.blit(fontobject.render(message, 1, (255,255,255)),
+                    ((screen.get_width() / 2) - 100, (screen.get_height() / 2) - 10))
+    pygame.display.flip()
 
 def display_end(screen):
     message = "Level Completed"
@@ -555,22 +653,22 @@ def display_end(screen):
 
 
 def ask(screen, question):
-  "ask(screen, question) -> answer"
-  pygame.font.init()
-  current_string = []
-  display_box(screen, question + ": " + "".join(current_string))
-  while 1:
-    inkey = get_key()
-    if inkey == pygame.K_BACKSPACE:
-      current_string = current_string[0:-1]
-    elif inkey == pygame.K_RETURN:
-      break
-    elif inkey == pygame.K_MINUS:
-      current_string.append("_")
-    elif inkey <= 127:
-      current_string.append(chr(inkey))
+    "ask(screen, question) -> answer"
+    pygame.font.init()
+    current_string = []
     display_box(screen, question + ": " + "".join(current_string))
-  return "".join(current_string)
+    while 1:
+        inkey = get_key()
+        if inkey == pygame.K_BACKSPACE:
+            current_string = current_string[0:-1]
+        elif inkey == pygame.K_RETURN:
+            break
+        elif inkey == pygame.K_MINUS:
+            current_string.append("_")
+        elif inkey <= 127:
+            current_string.append(chr(inkey))
+        display_box(screen, question + ": " + "".join(current_string))
+    return "".join(current_string)
 
 def start_game():
     start = pygame.display.set_mode((320,240))
@@ -598,11 +696,21 @@ if __name__ == '__main__':
     size = game.load_size()
     screen = pygame.display.set_mode(size)
 
-    #print(game.legalMoves())
-
     problem = SokobanSearchProblem(game)
+
+    time_start = time.perf_counter()
     solution_path = breadthFirstSearch(problem)
-    print('BFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
+    time_elapsed = (time.perf_counter() - time_start)
+    memb = psutil.Process(os.getpid())
+    print ("BrFS take %5.1f secs and %5.1f Byte of memory" % (time_elapsed, memb.memory_info().rss))
+    print('BrFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
+
+    # time_start = time.perf_counter()
+    # solution_path = aStarSearch(problem, Heuristic)
+    # time_elapsed = (time.perf_counter() - time_start)
+    # memb = psutil.Process(os.getpid())
+    # print ("A* take %5.1f secs and %5.1f Byte of memory" % (time_elapsed, memb.memory_info().rss))
+    # print('A* found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
 
     while 1:
         if game.is_completed(): display_end(screen)
