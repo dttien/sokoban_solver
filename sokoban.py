@@ -119,6 +119,12 @@ class SokobanState:
                 sys.stdout.flush()
             sys.stdout.write('\n')
 
+    def get_first_box(self):
+        return self.box[0]
+    
+    def get_first_dock(self):
+        return self.dock[0]
+
     def get_content(self,x,y):
         return self.matrix[y][x]
 
@@ -471,7 +477,12 @@ def breadthFirstSearch(problem):
                 # create new state
                 newState = (child[0], newPath)
                 frontier.push(newState)
+        # else: 
+        #     explored = []
     return moves
+
+def newBrFS(problem):
+    return
 
 def nullHeuristic(state, problem=None):
     
@@ -488,6 +499,11 @@ def Heuristic(state, problem):
                 min_dist = new_dist
         dist_sum += min_dist
     return dist_sum
+
+def sumMahathan(state,problem):
+    firstBox = state.get_first_box()
+    firstDock = state.get_first_dock()
+    return abs(firstBox[0] - firstDock[0]) + abs(firstBox[1] - firstDock[1])
 
 def aStarSearch(problem, heuristic=nullHeuristic):
     # Search the node that has the lowest combined cost and heuristic first.
@@ -672,9 +688,11 @@ def ask(screen, question):
 
 def start_game():
     start = pygame.display.set_mode((320,240))
-    level = int(ask(start,"Select Level"))
+    level,mode = ask(start,"Select Level").split(" ")
+    level = int(level)
+    mode = int(mode)
     if level > 0:
-        return level
+        return level,mode
     else:
         print ("ERROR: Invalid Level: "+str(level))
         sys.exit(2)
@@ -690,7 +708,7 @@ if __name__ == '__main__':
     background = 255, 226, 191
     pygame.init()
 
-    level = start_game()
+    level,mode = start_game()
     matrix = read_level('levels',level)
     game = SokobanState(matrix)
     size = game.load_size()
@@ -699,11 +717,18 @@ if __name__ == '__main__':
     problem = SokobanSearchProblem(game)
 
     time_start = time.perf_counter()
-    solution_path = breadthFirstSearch(problem)
-    time_elapsed = (time.perf_counter() - time_start)
-    memb = psutil.Process(os.getpid())
-    print ("BrFS take %5.1f secs and %5.1f Byte of memory" % (time_elapsed, memb.memory_info().rss))
-    print('BrFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
+    if(mode == 0):
+        solution_path = breadthFirstSearch(problem)
+        time_elapsed = (time.perf_counter() - time_start)
+        memb = psutil.Process(os.getpid())
+        print ("BrFS take %5.1f secs and %5.1f Byte of memory" % (time_elapsed, memb.memory_info().rss))
+        print('BrFS found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
+    else:
+        solution_path = aStarSearch(problem,sumMahathan)
+        time_elapsed = (time.perf_counter() - time_start)
+        memb = psutil.Process(os.getpid())
+        print ("A_star take %5.1f secs and %5.1f Byte of memory" % (time_elapsed, memb.memory_info().rss))
+        print('A_star found a path of %d moves: %s' % (len(solution_path), str(solution_path)))
 
     # time_start = time.perf_counter()
     # solution_path = aStarSearch(problem, Heuristic)
